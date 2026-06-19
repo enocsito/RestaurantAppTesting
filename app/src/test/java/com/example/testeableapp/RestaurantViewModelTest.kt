@@ -12,6 +12,9 @@ import org.junit.Test
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.test.resetMain
 import org.junit.After
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RestaurantViewModelTest {
@@ -82,5 +85,49 @@ class RestaurantViewModelTest {
 
         val totalEsperado = 5.50 + 6.00 + 6.00 + 7.50 // 25.0
         assertEquals(totalEsperado, viewModel.total.value, 0.001)
+    }
+
+    @Test
+    fun placeOrder_calculaCorrectamenteLaCantidadTotalDeArticulos() = runTest {
+        // Mantenemos la suscripcion activa para que los StateFlows se actualicen
+        backgroundScope.launch(UnconfinedTestDispatcher()) { viewModel.uiState.collect {} }
+
+        // Agregar 2 Patatas Bravas (ID: 1) y 1 Croquetas (ID: 2)
+        viewModel.addItem(1)
+        viewModel.incrementItem(1)
+        viewModel.addItem(2)
+
+        // Ejecutar la accion de pedir
+        viewModel.placeOrder()
+
+        val confirmation = viewModel.confirmation.value
+
+        // Verificaciones
+        assertNotNull("La confirmación no debería ser nula", confirmation)
+        // Existen 2 items distintos en la lista, pero la suma de las cantidades es 3
+        assertEquals(2, viewModel.orderedItems.value.size)
+        assertEquals(3, confirmation?.itemCount)
+    }
+
+    @Test
+    fun dismissConfirmation_limpiaElDialogoYElEstadoDelPedido() = runTest {
+        backgroundScope.launch(UnconfinedTestDispatcher()) { viewModel.uiState.collect {} }
+
+        // Preparar un estado con items
+        viewModel.addItem(3) // Calamares
+        viewModel.placeOrder()
+
+        // Asegurar de que el estado no esta vacio antes de limpiar
+        assertFalse(viewModel.isEmpty.value)
+        assertNotNull(viewModel.confirmation.value)
+
+        // Ejecutar la accion de descartar/aceptar confirmacion
+        viewModel.dismissConfirmation()
+
+        // Verificaciones del reinicio completo del ViewModel
+        assertNull("La confirmación debe ser nula tras descartarse", viewModel.confirmation.value)
+        assertTrue("El mapa de cantidades debe estar vacío", viewModel.quantities.value.isEmpty())
+        assertTrue("El pedido debe reportarse como vacío", viewModel.isEmpty.value)
+        assertEquals("El total debe reiniciarse a 0.0", 0.0, viewModel.total.value, 0.0)
     }
 }
